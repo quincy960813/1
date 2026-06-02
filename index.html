@@ -3,440 +3,904 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTRACT HUNTER v8.6 // AI 智能槓桿風控終端</title>
+    <title>CONTRACT HUNTER v9.0 // AI 智能槓桿風控終端</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
         .tech-font { font-family: 'Share Tech Mono', monospace, 'Microsoft JhengHei'; }
+
+        /* ── 捲軸美化 ── */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #05080E; }
+        ::-webkit-scrollbar-thumb { background: #2a3044; border-radius: 2px; }
+
+        /* ── 滑桿美化 ── */
+        input[type=range] { -webkit-appearance: none; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: #f59e0b;
+            cursor: pointer;
+            border: 2px solid #05080E;
+            margin-top: -5px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 4px; border-radius: 2px; background: #1f2937;
+        }
+
+        /* ── ATR 區塊進場動畫 ── */
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .anim-in { animation: fadeSlideIn 0.35s ease both; }
+
+        /* ── 閃爍數字更新效果 ── */
+        @keyframes flashUpdate {
+            0%   { color: #f59e0b; }
+            100% { color: inherit; }
+        }
+        .flash { animation: flashUpdate 0.5s ease; }
+
+        /* ── 安全/危險 badge ── */
+        .badge-safe    { background:#052010; color:#34d399; border:1px solid rgba(52,211,153,.25); }
+        .badge-warning { background:#1a1000; color:#f59e0b; border:1px solid rgba(245,158,11,.4); }
+        .badge-danger  { background:#1a0508; color:#f87171; border:1px solid rgba(248,113,113,.6);
+                         animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+        /* ── 籌碼條背景 ── */
+        .chip-bar-bg { background: repeating-linear-gradient(90deg,#0f1726 0px,#0f1726 2px,transparent 2px,transparent 6px); }
     </style>
 </head>
-<body class="bg-[#05080E] text-gray-300 p-4 md:p-8 tech-font selection:bg-amber-500 selection:text-black">
+<body class="bg-[#05080E] text-gray-300 p-3 md:p-6 tech-font selection:bg-amber-500 selection:text-black">
 
-    <div class="max-w-6xl mx-auto space-y-6">
-        
-        <div class="bg-[#0A101D] border border-gray-800 rounded p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div class="space-y-1">
-                <div class="flex items-center space-x-2">
-                    <span id="status-light" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <h1 class="text-lg font-bold text-white tracking-widest">CONTRACT HUNTER v8.6 // AI 智能槓桿風控終端</h1>
-                </div>
-                <div class="flex items-center mt-2">
-                    <input type="text" id="search-input" placeholder="切換幣種 (如: SOL, BTC, ETH)..." 
-                           class="bg-[#0F1726] border border-gray-700 rounded-l px-3 py-1.5 text-sm font-bold text-white focus:outline-none focus:border-amber-500 w-56 uppercase">
-                    <button onclick="handleSearch()" class="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs px-4 py-2 rounded-r transition duration-150 tracking-widest cursor-pointer">
-                        變更追蹤
-                    </button>
-                </div>
+<div class="max-w-6xl mx-auto space-y-4">
+
+    <!-- ══════════════════════════ 頂部 Header ══════════════════════════ -->
+    <div class="bg-[#0A101D] border border-gray-800 rounded p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+        <div class="space-y-2">
+            <div class="flex items-center space-x-2">
+                <span id="status-light" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <h1 class="text-base font-bold text-white tracking-widest">CONTRACT HUNTER v9.0 // AI 智能槓桿風控終端</h1>
             </div>
-            
-            <div class="flex flex-wrap items-center gap-6 bg-[#0F1726] p-3 rounded border border-gray-800 w-full md:w-auto">
-                <div class="space-y-1">
-                    <div class="flex justify-between text-xs font-bold">
-                        <span id="leverage-title" class="text-amber-400">🤖 AI 推薦動態槓桿:</span>
-                        <span id="leverage-val" class="text-white font-mono text-sm">--</span>
-                    </div>
-                    <input type="range" id="leverage-slider" min="1" max="100" value="20" oninput="userOverrideLeverage(this.value)"
-                           class="w-48 h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                    <div class="text-[9px] text-gray-500 flex justify-between">
-                        <span>[低槓桿防針]</span>
-                        <span id="ai-mode-status" class="text-emerald-500 font-bold">AI 託管中</span>
-                        <span>[高槓桿放大]</span>
-                    </div>
-                </div>
-                <div class="border-l border-gray-800 h-8 hidden sm:block"></div>
-                <div class="space-y-1">
-                    <span class="text-xs font-bold text-gray-500 block uppercase">預設單筆名義本金</span>
-                    <span class="text-sm font-bold text-gray-200 font-mono">$1,000 USDT</span>
-                </div>
+            <div class="flex items-center">
+                <input type="text" id="search-input" placeholder="切換幣種 (SOL, BTC, ETH)..."
+                       class="bg-[#0F1726] border border-gray-700 rounded-l px-3 py-1.5 text-sm font-bold text-white focus:outline-none focus:border-amber-500 w-52 uppercase">
+                <button onclick="handleSearch()"
+                        class="bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs px-4 py-2 rounded-r transition duration-150 tracking-widest cursor-pointer">
+                    變更追蹤
+                </button>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            
-            <div class="lg:col-span-1 bg-[#0A101D] border border-gray-800 rounded p-4 space-y-4">
-                <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-                    <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">🚨 實時合約異常池</span>
-                    <span id="anomaly-count" class="text-[10px] text-gray-400 bg-gray-900 px-1.5 py-0.5 rounded border border-gray-800">0 訊號</span>
+        <div class="flex flex-wrap items-center gap-5 bg-[#0F1726] p-3 rounded border border-gray-800 w-full md:w-auto">
+            <!-- 槓桿控制 -->
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs font-bold">
+                    <span id="leverage-title" class="text-amber-400">🤖 AI 推薦動態槓桿:</span>
+                    <span id="leverage-val" class="text-white font-mono text-sm ml-3">--</span>
                 </div>
-                <div class="text-[10px] text-gray-500 leading-tight bg-[#05080E] p-2 rounded border border-gray-900">
-                    💡 <span class="text-amber-500/80">觸發閾值：</span>24H 波動 &ge; 5% 或 24H 成交量 &ge; 1.5 億刀。未達標之常態幣種將自動隱藏。
-                </div>
-                <div id="anomaly-list" class="space-y-2 max-h-[550px] overflow-y-auto pr-1">
-                    <div class="text-xs text-gray-500 text-center py-12 font-mono animate-pulse">正在初始化雷達天線...</div>
+                <input type="range" id="leverage-slider" min="1" max="100" value="20"
+                       oninput="userOverrideLeverage(this.value)"
+                       class="w-44 cursor-pointer">
+                <div class="text-[9px] text-gray-500 flex justify-between">
+                    <span>[低槓桿防針]</span>
+                    <span id="ai-mode-status" class="text-emerald-500 font-bold">AI 託管中</span>
+                    <span>[高槓桿放大]</span>
                 </div>
             </div>
-
-            <div class="lg:col-span-3 space-y-6">
-                
-                <div class="bg-[#0A101D] p-5 rounded border border-gray-800 space-y-5">
-                    <div class="flex justify-between items-center border-b border-gray-800 pb-3">
-                        <div>
-                            <span class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">// OKX AI INTELLIGENT LEVERAGE MATRIX</span>
-                            <h2 id="active-ticker" class="text-2xl font-bold text-white tracking-wider">BTC-USDT-SWAP</h2>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-[10px] text-gray-500 font-bold block uppercase">主網最新成交價 (1.5s 安全輪詢)</span>
-                            <span id="live-price" class="text-2xl font-bold text-amber-400 font-mono">--</span>
-                        </div>
-                    </div>
-
-                    <div class="space-y-2">
-                        <div class="flex justify-between text-xs font-bold">
-                            <span class="text-emerald-400">🟢 AI 多頭籌碼優勢: <span id="long-pct">50%</span></span>
-                            <span class="text-red-400">🔴 AI 空頭籌碼優勢: <span id="short-pct">50%</span></span>
-                        </div>
-                        <div class="w-full h-3 bg-gray-900 rounded-full overflow-hidden flex border border-gray-800">
-                            <div id="long-bar" class="bg-emerald-500 h-full transition-all duration-100" style="width: 50%"></div>
-                            <div id="short-bar" class="bg-red-500 h-full transition-all duration-100" style="width: 50%"></div>
-                        </div>
-                        <div class="flex justify-between text-[10px] text-gray-500 font-mono">
-                            <span>[左側買方埋伏區]</span>
-                            <span id="ai-verdict" class="text-amber-400 font-bold">分析中...</span>
-                            <span>[右側賣方埋伏區]</span>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                        
-                        <div id="long-card" class="bg-[#081210] p-4 rounded border border-emerald-500/20 space-y-3">
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm font-bold text-emerald-400">🟢 AI 戰術防禦做多點 (限價開倉)</span>
-                                <span class="text-[10px] px-1.5 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-500/30 rounded font-mono font-bold" id="long-card-lev">--</span>
-                            </div>
-                            <div class="space-y-1">
-                                <span class="text-[10px] text-gray-500 block">建議掛單價</span>
-                                <div class="text-2xl font-bold text-white font-mono" id="calc-long-entry">--</div>
-                            </div>
-                            
-                            <div class="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-emerald-950/60">
-                                <div>
-                                    <span class="text-emerald-400 font-bold block">💰 AI 動態止盈 (TP)</span>
-                                    <span id="calc-long-tp" class="text-white font-bold text-sm block">--</span>
-                                    <span id="calc-long-tp-pnl" class="text-[10px] text-emerald-500 font-bold">--</span>
-                                </div>
-                                <div>
-                                    <span class="text-red-400 font-bold block">❌ AI 動態止損 (SL)</span>
-                                    <span id="calc-long-sl" class="text-white font-bold text-sm block">--</span>
-                                    <span id="calc-long-sl-pnl" class="text-[10px] text-red-500 font-bold">--</span>
-                                </div>
-                            </div>
-                            
-                            <div class="bg-[#040A08] p-2.5 rounded border border-emerald-950/80 font-mono text-xs flex justify-between items-center">
-                                <div>
-                                    <span class="text-gray-500 block text-[10px]">💀 估算強平價格 (Liq Price)</span>
-                                    <span id="calc-long-liq" class="text-gray-300 font-bold text-sm">--</span>
-                                </div>
-                                <span id="long-safety-badge" class="text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-bold uppercase">SAFE</span>
-                            </div>
-                        </div>
-
-                        <div id="short-card" class="bg-[#140A0C] p-4 rounded border border-red-500/20 space-y-3">
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm font-bold text-red-400">🔴 AI 戰術防禦做空點 (限價開倉)</span>
-                                <span class="text-[10px] px-1.5 py-0.5 bg-red-950 text-red-400 border border-red-500/30 rounded font-mono font-bold" id="short-card-lev">--</span>
-                            </div>
-                            <div class="space-y-1">
-                                <span class="text-[10px] text-gray-500 block">建議掛單價</span>
-                                <div class="text-2xl font-bold text-white font-mono" id="calc-short-entry">--</div>
-                            </div>
-                            
-                            <div class="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-red-950/60">
-                                <div>
-                                    <span class="text-emerald-400 font-bold block">💰 AI 動態止盈 (TP)</span>
-                                    <span id="calc-short-tp" class="text-white font-bold text-sm block">--</span>
-                                    <span id="calc-short-tp-pnl" class="text-[10px] text-emerald-500 font-bold">--</span>
-                                </div>
-                                <div>
-                                    <span class="text-red-400 font-bold block">❌ AI 動態止損 (SL)</span>
-                                    <span id="calc-short-sl" class="text-white font-bold text-sm block">--</span>
-                                    <span id="calc-short-sl-pnl" class="text-[10px] text-red-500 font-bold">--</span>
-                                </div>
-                            </div>
-                            
-                            <div class="bg-[#0D0506] p-2.5 rounded border border-red-950/80 font-mono text-xs flex justify-between items-center">
-                                <div>
-                                    <span class="text-gray-500 block text-[10px]">💀 估算強平價格 (Liq Price)</span>
-                                    <span id="calc-short-liq" class="text-gray-300 font-bold text-sm">--</span>
-                                </div>
-                                <span id="short-safety-badge" class="text-[10px] bg-red-950/80 text-red-400 px-2 py-0.5 rounded border border-red-500/30 font-bold uppercase">SAFE</span>
-                            </div>
-                        </div>
-
-                    </div>
+            <div class="border-l border-gray-800 h-8 hidden sm:block"></div>
+            <!-- 本金 + ATR 資訊 -->
+            <div class="space-y-1 text-right">
+                <span class="text-[10px] font-bold text-gray-500 block uppercase">預設單筆名義本金</span>
+                <span class="text-sm font-bold text-gray-200 font-mono">$1,000 USDT</span>
+                <div class="text-[10px] text-gray-600">
+                    ATR(14): <span id="header-atr" class="text-amber-500/80">計算中...</span>
                 </div>
-
-                <div class="bg-[#0A101D] p-4 rounded border border-gray-800 space-y-3">
-                    <div class="text-xs font-bold text-gray-400 uppercase tracking-wider flex justify-between">
-                        <span>// AI 真實對手盤博弈診斷</span>
-                        <span id="ai-confidence" class="text-amber-400">評估中</span>
-                    </div>
-                    <div id="feat-real-desc" class="text-xs text-gray-300 leading-relaxed bg-[#0F1726] p-3 rounded border border-gray-800 font-sans">
-                        正在分析當前盤面多空博弈主力行為...
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4 text-[11px] text-gray-500 border-t border-gray-800/60 pt-2 font-mono">
-                        <div>當期合約利息費率: <span id="feat-funding" class="text-gray-300 font-bold">--</span></div>
-                        <div>24H 交易所總量: <span id="feat-vol" class="text-gray-300 font-bold">--</span></div>
-                    </div>
-                </div>
-
             </div>
         </div>
     </div>
 
-    <script>
-        let allTickers = [];
-        let anorousTickers = []; 
-        let currentSelectedSymbol = "BTC-USDT-SWAP"; 
-        let currentFundingRate = 0.0001; 
-        let leverage = 20; 
-        let isAiManagedLeverage = true; 
-        const nominalValue = 1000; 
-        let updateIntervalToken = null;
+    <!-- ══════════════════════════ 主體區域 ══════════════════════════ -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
 
-        // 🧠 [AI 核心模組] 自適應指標運算器
-        // 模擬 RSI 與市場動能趨勢計算，讓 AI 判斷不只是依賴價格漲跌
-        function getAiMarketIndicator(changePct, fundingRate) {
-            // 計算一個 "AI 指標分數" (-100 到 100)
-            // 基於：價格漲幅(動量) + 資金費率(籌碼擁擠度)
-            let momentumScore = changePct * 1000; // 轉為動量分數
-            let fundingScore = fundingRate * 50000; // 資金費率偏離度
-            let totalAiScore = momentumScore - fundingScore; 
-            
+        <!-- ── 左側：異常池 ── -->
+        <div class="lg:col-span-1 bg-[#0A101D] border border-gray-800 rounded p-3 space-y-3">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">🚨 實時合約異常池</span>
+                <span id="anomaly-count" class="text-[10px] text-gray-400 bg-gray-900 px-1.5 py-0.5 rounded border border-gray-800">0 訊號</span>
+            </div>
+            <div class="text-[10px] text-gray-500 leading-tight bg-[#05080E] p-2 rounded border border-gray-900">
+                💡 <span class="text-amber-500/80">觸發閾值：</span>24H 波動 ≥ 5% 或成交量 ≥ 1.5億USDT
+            </div>
+            <div id="anomaly-list" class="space-y-1.5 max-h-[560px] overflow-y-auto pr-1">
+                <div class="text-xs text-gray-500 text-center py-12 font-mono animate-pulse">正在初始化雷達天線...</div>
+            </div>
+        </div>
+
+        <!-- ── 右側：主面板 ── -->
+        <div class="lg:col-span-3 space-y-4">
+
+            <!-- 標的 + 即時價格 + 籌碼條 -->
+            <div class="bg-[#0A101D] p-4 rounded border border-gray-800 space-y-4">
+                <div class="flex justify-between items-start border-b border-gray-800 pb-3">
+                    <div>
+                        <span class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">// OKX AI INTELLIGENT LEVERAGE MATRIX v9.0</span>
+                        <h2 id="active-ticker" class="text-2xl font-bold text-white tracking-wider mt-0.5">BTC-USDT-SWAP</h2>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-gray-500 font-bold block uppercase">主網最新成交價 (1.5s 輪詢)</span>
+                        <span id="live-price" class="text-2xl font-bold text-amber-400 font-mono">--</span>
+                        <div class="text-[10px] mt-0.5">
+                            <span id="price-change-pct" class="font-bold">--</span>
+                            <span class="text-gray-600 ml-2">24H</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 籌碼條 -->
+                <div class="space-y-1.5">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-emerald-400">🟢 AI 多頭籌碼優勢: <span id="long-pct">50%</span></span>
+                        <span class="text-red-400">🔴 AI 空頭籌碼優勢: <span id="short-pct">50%</span></span>
+                    </div>
+                    <div class="w-full h-3 bg-gray-900 rounded-full overflow-hidden flex border border-gray-800 chip-bar-bg">
+                        <div id="long-bar"  class="bg-emerald-500/80 h-full transition-all duration-300" style="width:50%"></div>
+                        <div id="short-bar" class="bg-red-500/80 h-full transition-all duration-300"  style="width:50%"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-gray-500 font-mono">
+                        <span>[左側買方埋伏區]</span>
+                        <span id="ai-verdict" class="text-amber-400 font-bold">分析中...</span>
+                        <span>[右側賣方埋伏區]</span>
+                    </div>
+                </div>
+
+                <!-- ── ATR 指標面板 (新增) ── -->
+                <div id="atr-panel" class="bg-[#060C18] rounded border border-gray-800/60 p-2.5 grid grid-cols-4 gap-2 text-[10px] font-mono anim-in">
+                    <div class="space-y-0.5">
+                        <span class="text-gray-600 block uppercase">ATR(14)</span>
+                        <span id="atr-val" class="text-amber-400 font-bold text-xs">--</span>
+                    </div>
+                    <div class="space-y-0.5">
+                        <span class="text-gray-600 block uppercase">ATR %</span>
+                        <span id="atr-pct" class="text-amber-400 font-bold text-xs">--</span>
+                    </div>
+                    <div class="space-y-0.5">
+                        <span class="text-gray-600 block uppercase">波動評級</span>
+                        <span id="atr-grade" class="font-bold text-xs">--</span>
+                    </div>
+                    <div class="space-y-0.5">
+                        <span class="text-gray-600 block uppercase">建議 RRR</span>
+                        <span id="rrr-val" class="text-sky-400 font-bold text-xs">--</span>
+                    </div>
+                </div>
+
+                <!-- ── 多空卡片 ── -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+
+                    <!-- 多頭卡 -->
+                    <div class="bg-[#060F0C] p-4 rounded border border-emerald-500/20 space-y-3 anim-in">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold text-emerald-400">🟢 AI 防禦做多 (限價開倉)</span>
+                            <span id="long-card-lev" class="text-[10px] px-1.5 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-500/30 rounded font-mono font-bold">--</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-gray-500 block">建議掛單價</span>
+                            <div id="calc-long-entry" class="text-2xl font-bold text-white font-mono">--</div>
+                        </div>
+                        <!-- TP / SL -->
+                        <div class="grid grid-cols-2 gap-2 text-xs font-mono border-t border-emerald-950/60 pt-2.5">
+                            <div class="space-y-0.5">
+                                <span class="text-emerald-400 font-bold block">💰 AI 動態止盈 (TP)</span>
+                                <span id="calc-long-tp"     class="text-white font-bold text-sm">--</span>
+                                <span id="calc-long-tp-pnl" class="text-[10px] text-emerald-500 font-bold block">--</span>
+                                <span id="calc-long-tp-dist" class="text-[10px] text-gray-600">--</span>
+                            </div>
+                            <div class="space-y-0.5">
+                                <span class="text-red-400 font-bold block">❌ AI 動態止損 (SL)</span>
+                                <span id="calc-long-sl"     class="text-white font-bold text-sm">--</span>
+                                <span id="calc-long-sl-pnl" class="text-[10px] text-red-500 font-bold block">--</span>
+                                <span id="calc-long-sl-dist" class="text-[10px] text-gray-600">--</span>
+                            </div>
+                        </div>
+                        <!-- RRR + Liq -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="bg-[#040A08] p-2 rounded border border-emerald-950/60 font-mono text-xs">
+                                <span class="text-gray-500 block text-[10px]">風報比 (RRR)</span>
+                                <span id="long-rrr" class="text-sky-400 font-bold">--</span>
+                            </div>
+                            <div class="bg-[#040A08] p-2 rounded border border-emerald-950/60 font-mono text-xs flex justify-between items-center">
+                                <div>
+                                    <span class="text-gray-500 block text-[10px]">💀 強平價 (Liq)</span>
+                                    <span id="calc-long-liq" class="text-gray-300 font-bold text-sm">--</span>
+                                </div>
+                                <span id="long-safety-badge" class="badge-safe text-[10px] px-2 py-0.5 rounded font-bold uppercase">SAFE</span>
+                            </div>
+                        </div>
+                        <!-- 止損距離進度條 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-gray-600">
+                                <span>止損距強平安全邊際</span>
+                                <span id="long-margin-pct" class="text-amber-500">--</span>
+                            </div>
+                            <div class="w-full h-1 bg-gray-900 rounded overflow-hidden">
+                                <div id="long-margin-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 空頭卡 -->
+                    <div class="bg-[#0F0608] p-4 rounded border border-red-500/20 space-y-3 anim-in">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold text-red-400">🔴 AI 防禦做空 (限價開倉)</span>
+                            <span id="short-card-lev" class="text-[10px] px-1.5 py-0.5 bg-red-950 text-red-400 border border-red-500/30 rounded font-mono font-bold">--</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-gray-500 block">建議掛單價</span>
+                            <div id="calc-short-entry" class="text-2xl font-bold text-white font-mono">--</div>
+                        </div>
+                        <!-- TP / SL -->
+                        <div class="grid grid-cols-2 gap-2 text-xs font-mono border-t border-red-950/60 pt-2.5">
+                            <div class="space-y-0.5">
+                                <span class="text-emerald-400 font-bold block">💰 AI 動態止盈 (TP)</span>
+                                <span id="calc-short-tp"     class="text-white font-bold text-sm">--</span>
+                                <span id="calc-short-tp-pnl" class="text-[10px] text-emerald-500 font-bold block">--</span>
+                                <span id="calc-short-tp-dist" class="text-[10px] text-gray-600">--</span>
+                            </div>
+                            <div class="space-y-0.5">
+                                <span class="text-red-400 font-bold block">❌ AI 動態止損 (SL)</span>
+                                <span id="calc-short-sl"     class="text-white font-bold text-sm">--</span>
+                                <span id="calc-short-sl-pnl" class="text-[10px] text-red-500 font-bold block">--</span>
+                                <span id="calc-short-sl-dist" class="text-[10px] text-gray-600">--</span>
+                            </div>
+                        </div>
+                        <!-- RRR + Liq -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="bg-[#0D0506] p-2 rounded border border-red-950/60 font-mono text-xs">
+                                <span class="text-gray-500 block text-[10px]">風報比 (RRR)</span>
+                                <span id="short-rrr" class="text-sky-400 font-bold">--</span>
+                            </div>
+                            <div class="bg-[#0D0506] p-2 rounded border border-red-950/60 font-mono text-xs flex justify-between items-center">
+                                <div>
+                                    <span class="text-gray-500 block text-[10px]">💀 強平價 (Liq)</span>
+                                    <span id="calc-short-liq" class="text-gray-300 font-bold text-sm">--</span>
+                                </div>
+                                <span id="short-safety-badge" class="badge-safe text-[10px] px-2 py-0.5 rounded font-bold uppercase">SAFE</span>
+                            </div>
+                        </div>
+                        <!-- 止損距離進度條 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-gray-600">
+                                <span>止損距強平安全邊際</span>
+                                <span id="short-margin-pct" class="text-amber-500">--</span>
+                            </div>
+                            <div class="w-full h-1 bg-gray-900 rounded overflow-hidden">
+                                <div id="short-margin-bar" class="h-full bg-red-500 transition-all duration-300" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- AI 博弈診斷 -->
+            <div class="bg-[#0A101D] p-4 rounded border border-gray-800 space-y-3">
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider flex justify-between">
+                    <span>// AI 真實對手盤博弈診斷</span>
+                    <span id="ai-confidence" class="text-amber-400">評估中</span>
+                </div>
+                <div id="feat-real-desc" class="text-xs text-gray-300 leading-relaxed bg-[#0F1726] p-3 rounded border border-gray-800 font-sans">
+                    正在分析當前盤面多空博弈主力行為...
+                </div>
+                <div class="grid grid-cols-3 gap-3 text-[11px] text-gray-500 border-t border-gray-800/60 pt-2 font-mono">
+                    <div>資金費率: <span id="feat-funding" class="text-gray-300 font-bold">--</span></div>
+                    <div>24H 總量: <span id="feat-vol" class="text-gray-300 font-bold">--</span></div>
+                    <div>K線來源: <span id="feat-candle-src" class="text-gray-300 font-bold">--</span></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONTRACT HUNTER v9.0 — 核心邏輯
+//  重點優化：ATR 真實波動計算 + 精確 TP/SL/Liq 公式
+//  CORS 處理：自動偵測並切換代理
+// ═══════════════════════════════════════════════════════════
+
+let allTickers       = [];
+let anomalyTickers   = [];
+let currentSymbol    = "BTC-USDT-SWAP";
+let currentFunding   = 0.0001;
+let leverage         = 20;
+let isAiLeverage     = true;
+const NOMINAL        = 1000;
+const MMR            = 0.005;
+let atrCache         = { symbol: "", atr: null, atrPct: null, candles: [] };
+let updateTimer      = null;
+let atrTimer         = null;
+
+// ─────────────────────────────────────────────
+//  CORS Proxy 管理
+//  直連失敗時自動 fallback 到代理清單
+// ─────────────────────────────────────────────
+const OKX_BASE = "https://www.okx.com";
+const CORS_PROXIES = [
+    "",                                         // 0: 直連（本機 / 已授權環境）
+    "https://corsproxy.io/?",                   // 1: corsproxy.io
+    "https://api.allorigins.win/raw?url=",      // 2: allorigins
+];
+let activeProxyIdx = 0;
+let proxyTested    = false;
+
+function buildUrl(path) {
+    const base = OKX_BASE + path;
+    if (activeProxyIdx === 0) return base;
+    return CORS_PROXIES[activeProxyIdx] + encodeURIComponent(base);
+}
+
+// 設定狀態燈
+function setStatus(mode) {
+    // mode: 'ok' | 'proxy' | 'error'
+    const dot = document.getElementById("status-light");
+    const map = {
+        ok:    ["bg-emerald-500", "animate-pulse"],
+        proxy: ["bg-amber-500",  "animate-pulse"],
+        error: ["bg-red-500",    ""]
+    };
+    dot.className = "w-2 h-2 rounded-full " + map[mode].join(" ");
+}
+
+// ─────────────────────────────────────────────
+//  工具函式
+// ─────────────────────────────────────────────
+function fmt(price) {
+    if (!price || isNaN(price)) return "--";
+    const n = parseFloat(price);
+    if (n >= 10000)  return n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (n >= 1000)   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (n >= 1)      return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    if (n >= 0.01)   return n.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    return n.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+}
+
+function flash(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("flash");
+    void el.offsetWidth;
+    el.classList.add("flash");
+}
+
+// ─────────────────────────────────────────────
+//  API 請求：含自動 CORS proxy 偵測 + retry
+// ─────────────────────────────────────────────
+async function rawFetch(url, timeout) {
+    timeout = timeout || 5000;
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), timeout);
+    try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(tid);
+        return await res.json();
+    } catch(e) {
+        clearTimeout(tid);
+        throw e;
+    }
+}
+
+async function apiFetch(path, retries, timeout) {
+    retries = retries || 2;
+    timeout = timeout || 5000;
+
+    if (!proxyTested) {
+        proxyTested = true;
+        const testPath = "/api/v5/market/ticker?instId=BTC-USDT-SWAP";
+        let found = false;
+        for (let pi = 0; pi < CORS_PROXIES.length; pi++) {
+            try {
+                const testUrl = pi === 0
+                    ? OKX_BASE + testPath
+                    : CORS_PROXIES[pi] + encodeURIComponent(OKX_BASE + testPath);
+                const json = await rawFetch(testUrl, pi === 0 ? 3000 : 4500);
+                if (json && json.code === "0") {
+                    activeProxyIdx = pi;
+                    setStatus(pi === 0 ? "ok" : "proxy");
+                    console.log("[NET] 連線模式:", pi === 0 ? "直連" : "Proxy #" + pi);
+                    found = true;
+                    break;
+                }
+            } catch(e) { /* 繼續嘗試下一個 */ }
+        }
+        if (!found) { setStatus("error"); return null; }
+    }
+
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const json = await rawFetch(buildUrl(path), timeout);
+            if (json && json.code === "0") return json;
+        } catch(e) {
+            if (i < retries) {
+                await new Promise(r => setTimeout(r, 500 * (i + 1)));
+            }
+        }
+    }
+    return null;
+}
+
+// ─────────────────────────────────────────────
+//  🧮 ATR(14) 真實波動率計算
+//  使用 OKX 1H K 線，取 14 根 True Range 平均
+// ─────────────────────────────────────────────
+async function fetchAndCalcATR(symbol) {
+    try {
+        const json = await apiFetch(
+            `/api/v5/market/candles?instId=${symbol}&bar=1H&limit=30`
+        );
+        if (!json || !json.data || json.data.length < 15) return null;
+
+        // OKX 格式：[ts, open, high, low, close, vol, volCcy, ...]
+        const candles = json.data.map(c => ({
+            open : parseFloat(c[1]),
+            high : parseFloat(c[2]),
+            low  : parseFloat(c[3]),
+            close: parseFloat(c[4])
+        })).reverse(); // OKX 返回由新到舊，先翻轉
+
+        // 計算 True Range 序列
+        const trList = [];
+        for (let i = 1; i < candles.length; i++) {
+            const tr = Math.max(
+                candles[i].high - candles[i].low,
+                Math.abs(candles[i].high - candles[i - 1].close),
+                Math.abs(candles[i].low  - candles[i - 1].close)
+            );
+            trList.push(tr);
+        }
+
+        // Wilder's Smoothing (EMA 風格)
+        const period = 14;
+        let atr = trList.slice(0, period).reduce((a, b) => a + b, 0) / period;
+        for (let i = period; i < trList.length; i++) {
+            atr = (atr * (period - 1) + trList[i]) / period;
+        }
+
+        const lastClose = candles[candles.length - 1].close;
+        const atrPct    = atr / lastClose;
+
+        atrCache = { symbol, atr, atrPct, lastClose };
+        document.getElementById("header-atr").innerText = fmt(atr);
+        document.getElementById("atr-val").innerText    = fmt(atr);
+        document.getElementById("atr-pct").innerText    = (atrPct * 100).toFixed(3) + "%";
+        document.getElementById("feat-candle-src").innerText = "1H×30根";
+
+        // 波動評級
+        let grade = "", gradeClass = "";
+        if (atrPct < 0.008) {
+            grade = "😴 極低"; gradeClass = "text-gray-500";
+        } else if (atrPct < 0.018) {
+            grade = "🟢 正常"; gradeClass = "text-emerald-400";
+        } else if (atrPct < 0.035) {
+            grade = "🟡 偏高"; gradeClass = "text-amber-400";
+        } else {
+            grade = "🔴 極高"; gradeClass = "text-red-400";
+        }
+        const gradeEl = document.getElementById("atr-grade");
+        gradeEl.innerText   = grade;
+        gradeEl.className   = gradeClass + " font-bold text-xs";
+
+        return { atr, atrPct, lastClose };
+    } catch (e) {
+        console.warn("[ATR] 計算失敗:", e.message);
+        return null;
+    }
+}
+
+// ─────────────────────────────────────────────
+//  🧠 AI 核心：動態指標評分
+// ─────────────────────────────────────────────
+function calcAiScore(changePct, fundingRate, atrPct) {
+    // momentum：轉為 -100~100 之間，使用 tanh 壓縮防爆衝
+    const rawMomentum = changePct * 20;
+    const momentum    = Math.tanh(rawMomentum) * 100;
+
+    // 資金費率偏離分數（正費率 = 多頭過擁擠 = 偏空信號）
+    const fundingBias = Math.tanh(fundingRate * 2000) * 50;
+
+    // 綜合分數
+    const score = momentum - fundingBias;
+
+    // ATR 修正：高波動時壓縮分數信心度
+    const atrFactor = atrPct ? Math.max(0.4, 1 - atrPct * 10) : 0.8;
+    const adjScore  = score * atrFactor;
+
+    return {
+        score       : adjScore,
+        rsiProxy    : Math.round(Math.max(10, Math.min(90, 50 + adjScore * 0.45))),
+        isOverbought: adjScore > 38,
+        isOversold  : adjScore < -38
+    };
+}
+
+// ─────────────────────────────────────────────
+//  🧠 AI 動態槓桿決策
+// ─────────────────────────────────────────────
+function calcAiLeverage(changePct, aiData, atrPct) {
+    const absChange = Math.abs(changePct);
+    const atrRisk   = atrPct || 0.02;
+    let lev;
+
+    // 極端信號 → 低槓桿保護
+    if (aiData.isOverbought || aiData.isOversold) {
+        lev = 5;
+    } else if (atrRisk >= 0.04 || absChange >= 0.08) {
+        lev = 8;
+    } else if (atrRisk >= 0.025 || absChange >= 0.05) {
+        lev = 15;
+    } else if (atrRisk >= 0.015 || absChange >= 0.03) {
+        lev = 25;
+    } else {
+        lev = 50;
+    }
+    return Math.max(3, Math.min(75, lev));
+}
+
+// ─────────────────────────────────────────────
+//  🎯 核心：ATR 基準 TP / SL / Liq 計算
+//
+//  公式說明：
+//  ┌─ 進場偏移     = 0.5 × ATR（等待回調進場）
+//  ├─ 止損寬度(SL) = 1.0 × ATR（讓市場有呼吸空間）
+//  ├─ 止盈寬度(TP) = SL × RRR（依風報比反推）
+//  └─ 強平價(Liq)  = 精確公式（含 MMR）
+//
+//  OKX 逐倉強平估算：
+//    多頭 Liq = entry × (1 - 1/lev + MMR)
+//    空頭 Liq = entry × (1 + 1/lev - MMR)
+// ─────────────────────────────────────────────
+function calcTPSL(side, entryPrice, atr, lev, rrr) {
+    // 止損寬度 = 1.0 ATR（可調）
+    const slWidth = atr * 1.0;
+    // 止盈寬度 = slWidth × RRR
+    const tpWidth = slWidth * rrr;
+
+    let tp, sl, liqPrice;
+
+    if (side === "long") {
+        tp       = entryPrice + tpWidth;
+        sl       = entryPrice - slWidth;
+        liqPrice = entryPrice * (1.0 - (1.0 / lev) + MMR);
+    } else {
+        tp       = entryPrice - tpWidth;
+        sl       = entryPrice + slWidth;
+        liqPrice = entryPrice * (1.0 + (1.0 / lev) - MMR);
+    }
+
+    // ROI 計算：基於名義本金 & 槓桿
+    const tpRoi = (tpWidth / entryPrice) * lev * 100;
+    const slRoi = (slWidth / entryPrice) * lev * 100;
+
+    // 止損距強平安全距離 %
+    let marginPct;
+    if (side === "long") {
+        marginPct = sl > liqPrice
+            ? ((sl - liqPrice) / entryPrice) * 100
+            : 0;
+    } else {
+        marginPct = sl < liqPrice
+            ? ((liqPrice - sl) / entryPrice) * 100
+            : 0;
+    }
+
+    return { tp, sl, liqPrice, tpRoi, slRoi, tpWidth, slWidth, marginPct };
+}
+
+// ─────────────────────────────────────────────
+//  決定風報比 (RRR)
+// ─────────────────────────────────────────────
+function calcRRR(atrPct, aiData) {
+    // 高波動 → 要求更高 RRR 補償風險
+    let rrr;
+    if (atrPct >= 0.04)       rrr = 3.5;
+    else if (atrPct >= 0.025) rrr = 3.0;
+    else if (atrPct >= 0.015) rrr = 2.5;
+    else                      rrr = 2.0;
+
+    // 信號極端時 RRR 額外提升
+    if (aiData.isOverbought || aiData.isOversold) rrr = Math.max(rrr, 3.0);
+    return rrr;
+}
+
+// ─────────────────────────────────────────────
+//  UI 更新：槓桿
+// ─────────────────────────────────────────────
+function applyLeverageUI(lev) {
+    document.getElementById("leverage-val").innerText    = lev + "x";
+    document.getElementById("leverage-slider").value     = lev;
+    document.getElementById("long-card-lev").innerText   = lev + "x";
+    document.getElementById("short-card-lev").innerText  = lev + "x";
+}
+
+function userOverrideLeverage(val) {
+    isAiLeverage = false;
+    leverage = parseInt(val);
+    document.getElementById("ai-mode-status").innerText   = "手動調整中";
+    document.getElementById("ai-mode-status").className   = "text-amber-500 font-bold";
+    document.getElementById("leverage-title").innerText   = "⚙️ 手動逐倉槓桿:";
+    applyLeverageUI(leverage);
+    // 重新渲染（使用快取 ATR）
+    if (atrCache.atr) triggerRecalc();
+}
+
+// ─────────────────────────────────────────────
+//  主渲染函式
+// ─────────────────────────────────────────────
+function renderMatrix(lastPrice, changePct, vol) {
+    // 即時價格
+    const priceEl = document.getElementById("live-price");
+    priceEl.innerText = "$" + fmt(lastPrice);
+    flash("live-price");
+
+    // 24H 漲跌
+    const changePctEl = document.getElementById("price-change-pct");
+    changePctEl.innerText   = (changePct >= 0 ? "+" : "") + (changePct * 100).toFixed(2) + "%";
+    changePctEl.className   = "font-bold text-sm " + (changePct >= 0 ? "text-emerald-400" : "text-red-400");
+
+    // 取 ATR（有快取就用，否則用預設）
+    const atrData = (atrCache.symbol === currentSymbol && atrCache.atr)
+        ? atrCache
+        : { atr: lastPrice * 0.018, atrPct: 0.018 }; // fallback: 1.8%
+
+    // AI 評分
+    const ai = calcAiScore(changePct, currentFunding, atrData.atrPct);
+
+    // 籌碼分布
+    const longFinal  = Math.round(Math.max(10, Math.min(90, 50 + ai.score)));
+    const shortFinal = 100 - longFinal;
+    document.getElementById("long-pct").innerText   = longFinal + "%";
+    document.getElementById("short-pct").innerText  = shortFinal + "%";
+    document.getElementById("long-bar").style.width  = longFinal + "%";
+    document.getElementById("short-bar").style.width = shortFinal + "%";
+
+    // AI 槓桿
+    if (isAiLeverage) {
+        leverage = calcAiLeverage(changePct, ai, atrData.atrPct);
+        applyLeverageUI(leverage);
+    }
+
+    // RRR
+    const rrr = calcRRR(atrData.atrPct, ai);
+    document.getElementById("rrr-val").innerText = "1 : " + rrr.toFixed(1);
+
+    // ── 進場價位（0.5 ATR 偏移）──
+    const entryOffset = atrData.atr * 0.5;
+    const longEntry   = lastPrice - entryOffset;
+    const shortEntry  = lastPrice + entryOffset;
+
+    // ── 計算 TP / SL / Liq ──
+    const L = calcTPSL("long",  longEntry,  atrData.atr, leverage, rrr);
+    const S = calcTPSL("short", shortEntry, atrData.atr, leverage, rrr);
+
+    // ── 渲染多頭 ──
+    document.getElementById("calc-long-entry").innerText  = "$" + fmt(longEntry);
+    document.getElementById("calc-long-tp").innerText     = "$" + fmt(L.tp);
+    document.getElementById("calc-long-sl").innerText     = "$" + fmt(L.sl);
+    document.getElementById("calc-long-liq").innerText    = "$" + fmt(L.liqPrice);
+    document.getElementById("calc-long-tp-pnl").innerText = `AI 預估獲利: +${L.tpRoi.toFixed(0)}% ROI`;
+    document.getElementById("calc-long-sl-pnl").innerText = `AI 預估防禦: -${L.slRoi.toFixed(0)}% ROI`;
+    document.getElementById("calc-long-tp-dist").innerText = `距進場 +${(L.tpWidth / longEntry * 100).toFixed(2)}% (${fmt(L.tpWidth)} USDT)`;
+    document.getElementById("calc-long-sl-dist").innerText = `距進場 -${(L.slWidth / longEntry * 100).toFixed(2)}% (${fmt(L.slWidth)} USDT)`;
+    document.getElementById("long-rrr").innerText = "1 : " + rrr.toFixed(1);
+    flash("calc-long-entry");
+
+    // 安全邊際進度條（多頭）
+    const longMarginPct = L.marginPct;
+    const longMarginBar = document.getElementById("long-margin-bar");
+    const longMarginEl  = document.getElementById("long-margin-pct");
+    longMarginBar.style.width  = Math.min(100, longMarginPct * 20) + "%";
+    longMarginEl.innerText     = longMarginPct.toFixed(2) + "%";
+    longMarginBar.className    = "h-full transition-all duration-300 " +
+        (longMarginPct > 1 ? "bg-emerald-500" : longMarginPct > 0.3 ? "bg-amber-500" : "bg-red-500");
+
+    // ── 渲染空頭 ──
+    document.getElementById("calc-short-entry").innerText  = "$" + fmt(shortEntry);
+    document.getElementById("calc-short-tp").innerText     = "$" + fmt(S.tp);
+    document.getElementById("calc-short-sl").innerText     = "$" + fmt(S.sl);
+    document.getElementById("calc-short-liq").innerText    = "$" + fmt(S.liqPrice);
+    document.getElementById("calc-short-tp-pnl").innerText = `AI 預估獲利: +${S.tpRoi.toFixed(0)}% ROI`;
+    document.getElementById("calc-short-sl-pnl").innerText = `AI 預估防禦: -${S.slRoi.toFixed(0)}% ROI`;
+    document.getElementById("calc-short-tp-dist").innerText = `距進場 -${(S.tpWidth / shortEntry * 100).toFixed(2)}% (${fmt(S.tpWidth)} USDT)`;
+    document.getElementById("calc-short-sl-dist").innerText = `距進場 +${(S.slWidth / shortEntry * 100).toFixed(2)}% (${fmt(S.slWidth)} USDT)`;
+    document.getElementById("short-rrr").innerText = "1 : " + rrr.toFixed(1);
+    flash("calc-short-entry");
+
+    // 安全邊際進度條（空頭）
+    const shortMarginPct = S.marginPct;
+    const shortMarginBar = document.getElementById("short-margin-bar");
+    const shortMarginEl  = document.getElementById("short-margin-pct");
+    shortMarginBar.style.width  = Math.min(100, shortMarginPct * 20) + "%";
+    shortMarginEl.innerText     = shortMarginPct.toFixed(2) + "%";
+    shortMarginBar.className    = "h-full transition-all duration-300 " +
+        (shortMarginPct > 1 ? "bg-red-500" : shortMarginPct > 0.3 ? "bg-amber-500" : "bg-red-300");
+
+    // ── 安全 Badge ──
+    // 多頭：止損必須高於強平價
+    const longSafe = L.sl > L.liqPrice;
+    const longBadgeEl = document.getElementById("long-safety-badge");
+    if (longSafe) {
+        longBadgeEl.className   = "badge-safe text-[10px] px-2 py-0.5 rounded font-bold uppercase";
+        longBadgeEl.innerText   = "SAFE";
+    } else {
+        longBadgeEl.className   = "badge-danger text-[10px] px-2 py-0.5 rounded font-bold uppercase";
+        longBadgeEl.innerText   = "⚠ RISK";
+    }
+
+    // 空頭：止損必須低於強平價
+    const shortSafe = S.sl < S.liqPrice;
+    const shortBadgeEl = document.getElementById("short-safety-badge");
+    if (shortSafe) {
+        shortBadgeEl.className  = "badge-safe text-[10px] px-2 py-0.5 rounded font-bold uppercase";
+        shortBadgeEl.innerText  = "SAFE";
+    } else {
+        shortBadgeEl.className  = "badge-danger text-[10px] px-2 py-0.5 rounded font-bold uppercase";
+        shortBadgeEl.innerText  = "⚠ RISK";
+    }
+
+    // 24H 量
+    if (vol) document.getElementById("feat-vol").innerText = "$" + vol.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+    // ── AI 決策文字 ──
+    const verdictEl    = document.getElementById("ai-verdict");
+    const confidenceEl = document.getElementById("ai-confidence");
+    const descEl       = document.getElementById("feat-real-desc");
+    const atrGradeText = document.getElementById("atr-grade")?.innerText || "正常";
+
+    if (ai.isOverbought) {
+        verdictEl.innerText    = "🚨 市場過熱 (AI: 超買訊號)";
+        confidenceEl.innerText = `🔥 AI 決策：高位壓抑 // 槓桿鎖定 ${leverage}x`;
+        descEl.innerHTML = `🤖 <b>AI 智慧風控：</b>RSI 代理指標進入超買區，資金費率偏高，多頭過度擁擠。AI 已執行 <b>「低槓桿防禦模式」</b>，SL 基於 ATR(${fmt(atrData.atr)}) 設定，避免被主力插針出貨。RRR 提升至 1:${rrr.toFixed(1)}。`;
+    } else if (ai.isOversold) {
+        verdictEl.innerText    = "⚡ 市場極度超賣 (AI: 接針機會)";
+        confidenceEl.innerText = `🔥 AI 決策：底部強撐 // 槓桿鎖定 ${leverage}x`;
+        descEl.innerHTML = `🤖 <b>AI 智慧風控：</b>市場出現恐慌性拋售，AI 偵測到 <b>「超賣反彈機會」</b>。ATR(${fmt(atrData.atr)}) 顯示波動 ${atrGradeText}，TP/SL 已自動按 ATR×1.0/×${rrr.toFixed(1)} 調整掛單位置。`;
+    } else {
+        verdictEl.innerText    = "⚖️ 區間震盪 (AI: 趨勢觀望)";
+        confidenceEl.innerText = `📊 AI 決策：震盪縮量 // 槓桿調整至 ${leverage}x`;
+        descEl.innerHTML = `🤖 <b>AI 智慧風控：</b>市場處於常態波動 (ATR ${fmt(atrData.atr)} / ${(atrData.atrPct*100).toFixed(2)}%)。AI 採用 <b>「ATR 動態 TP/SL」</b>，止損寬度 = 1.0 ATR，止盈目標 = ${rrr.toFixed(1)} ATR，當前風報比 1:${rrr.toFixed(1)}。`;
+    }
+}
+
+// ─────────────────────────────────────────────
+//  API 呼叫
+// ─────────────────────────────────────────────
+async function fetchTicker() {
+    const json = await apiFetch(`/api/v5/market/ticker?instId=${currentSymbol}`);
+    if (!json?.data?.[0]) return;
+    const d = json.data[0];
+    const last    = parseFloat(d.last);
+    const open24h = parseFloat(d.open24h);
+    const change  = open24h ? (last - open24h) / open24h : 0;
+    const vol     = parseFloat(d.volCcy24h);
+    renderMatrix(last, change, vol);
+}
+
+async function fetchFunding(symbol) {
+    const json = await apiFetch(`/api/v5/public/funding-rate?instId=${symbol}`);
+    if (!json?.data?.[0]) return;
+    currentFunding = parseFloat(json.data[0].fundingRate);
+    document.getElementById("feat-funding").innerText = (currentFunding * 100).toFixed(4) + "%";
+}
+
+async function scanAnomalies() {
+    const json = await apiFetch("/api/v5/market/tickers?instType=SWAP");
+    if (!json?.data) return;
+
+    allTickers = json.data
+        .filter(d => d.instId.endsWith("-USDT-SWAP"))
+        .map(d => {
+            const last = parseFloat(d.last);
+            const o24h = parseFloat(d.open24h);
             return {
-                score: totalAiScore, // 數值越大越看多，越小越看空
-                rsiProxy: Math.min(100, Math.max(0, 50 + totalAiScore * 0.5)), // 模擬 RSI 
-                isOverbought: totalAiScore > 40,
-                isOversold: totalAiScore < -40
+                symbol: d.instId,
+                last,
+                change: o24h ? (last - o24h) / o24h : 0,
+                vol   : parseFloat(d.volCcy24h)
             };
-        }
+        });
 
-        function formatCryptoPrice(price) {
-            if (!price) return "--";
-            const num = parseFloat(price);
-            if (num >= 1000) return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            if (num >= 1) return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-            if (num >= 0.01) return num.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-            return num.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 });
-        }
+    anomalyTickers = allTickers
+        .filter(t => Math.abs(t.change) >= 0.05 || t.vol >= 150_000_000)
+        .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
 
-        function calculateAiDynamicLeverage(changePct, aiIndicator) {
-            const absChange = Math.abs(changePct);
-            let targetLev = 20;
+    renderAnomalyList();
+}
 
-            // AI 邏輯：如果 RSI 指標極端 (超買或超賣)，AI 自動降槓桿保護
-            if (aiIndicator.isOverbought || aiIndicator.isOversold) {
-                targetLev = 5; 
-            } else if (absChange >= 0.08) {
-                targetLev = 10;
-            } else if (absChange >= 0.04) {
-                targetLev = 20;
-            } else {
-                targetLev = 50;
-            }
-            
-            targetLev = Math.max(3, Math.min(75, targetLev));
-            return targetLev;
-        }
+function renderAnomalyList() {
+    const container = document.getElementById("anomaly-list");
+    const countEl   = document.getElementById("anomaly-count");
+    container.innerHTML = "";
+    countEl.innerText   = `${anomalyTickers.length} 訊號`;
 
-        function userOverrideLeverage(val) {
-            isAiManagedLeverage = false; 
-            document.getElementById("ai-mode-status").innerText = "手動調整中";
-            document.getElementById("ai-mode-status").className = "text-amber-500 font-bold";
-            document.getElementById("leverage-title").innerText = "⚙️ 手動逐倉槓桿:";
-            leverage = parseInt(val);
-            applyLeverageUiUpdate(leverage);
-            triggerMatrixRecalculation();
-        }
-
-        function applyLeverageUiUpdate(lev) {
-            document.getElementById("leverage-val").innerText = lev + "x";
-            document.getElementById("leverage-slider").value = lev;
-            document.getElementById("long-card-lev").innerText = lev + "x";
-            document.getElementById("short-card-lev").innerText = lev + "x";
-        }
-
-        async function fetchSingleTickerData() {
-            try {
-                const res = await fetch(`https://www.okx.com/api/v5/market/ticker?instId=${currentSelectedSymbol}`).then(r => r.json());
-                if (res.code === "0" && res.data && res.data.length > 0) {
-                    const data = res.data[0];
-                    const lastPrice = parseFloat(data.last);
-                    const open24h = parseFloat(data.open24h);
-                    const changePct = open24h ? (lastPrice - open24h) / open24h : 0;
-                    const vol = parseFloat(data.volCcy24h);
-                    renderLiveMatrix(lastPrice, changePct, vol);
-                }
-            } catch (e) { console.error(e); }
-        }
-
-        function triggerMatrixRecalculation() {
-            if (allTickers.length > 0) {
-                const cur = allTickers.find(t => t.symbol === currentSelectedSymbol);
-                if (cur) renderLiveMatrix(cur.last, cur.change, cur.vol || 0);
-            }
-        }
-
-        function renderLiveMatrix(lastPrice, changePct, vol) {
-            document.getElementById("live-price").innerText = '$' + formatCryptoPrice(lastPrice);
-
-            // 🧠 呼叫 AI 決策核心
-            const aiData = getAiMarketIndicator(changePct, currentFundingRate);
-            
-            // 籌碼分布計算
-            const longScore = 50 + aiData.score;
-            const shortScore = 100 - longScore;
-            
-            const longFinalPct = Math.round(Math.max(10, Math.min(90, longScore)));
-            const shortFinalPct = 100 - longFinalPct;
-
-            document.getElementById("long-pct").innerText = `${longFinalPct}%`;
-            document.getElementById("short-pct").innerText = `${shortFinalPct}%`;
-            document.getElementById("long-bar").style.width = `${longFinalPct}%`;
-            document.getElementById("short-bar").style.width = `${shortFinalPct}%`;
-
-            if (isAiManagedLeverage) {
-                leverage = calculateAiDynamicLeverage(changePct, aiData);
-                applyLeverageUiUpdate(leverage);
-            }
-
-            const volatilityAlpha = 0.015 + Math.min(0.04, Math.abs(changePct) * 0.5);
-            const long_entry = lastPrice * (1.0 - volatilityAlpha);
-            const short_entry = lastPrice * (1.0 + volatilityAlpha);
-
-            document.getElementById("calc-long-entry").innerText = '$' + formatCryptoPrice(long_entry);
-            document.getElementById("calc-short-entry").innerText = '$' + formatCryptoPrice(short_entry);
-
-            const dynamicProfitMultiplier = volatilityAlpha * 2.5; 
-            const dynamicLossMultiplier = volatilityAlpha * 0.8;
-
-            const long_tp = long_entry * (1.0 + dynamicProfitMultiplier);
-            const long_sl = long_entry * (1.0 - dynamicLossMultiplier);
-            const short_tp = short_entry * (1.0 - dynamicProfitMultiplier);
-            const short_sl = short_entry * (1.0 + dynamicLossMultiplier);
-
-            const mmr = 0.01; 
-            const long_liq = long_entry * (1.0 - (1.0 / leverage) + mmr);
-            const short_liq = short_entry * (1.0 + (1.0 / leverage) - mmr);
-
-            // 渲染數據
-            document.getElementById("calc-long-tp").innerText = '$' + formatCryptoPrice(long_tp);
-            document.getElementById("calc-long-sl").innerText = '$' + formatCryptoPrice(long_sl);
-            document.getElementById("calc-long-liq").innerText = '$' + formatCryptoPrice(long_liq);
-            document.getElementById("calc-long-tp-pnl").innerText = `AI 預估獲利: +${(dynamicProfitMultiplier * leverage * 100).toFixed(0)}% ROI`;
-            document.getElementById("calc-long-sl-pnl").innerText = `AI 預估防禦: -${(dynamicLossMultiplier * leverage * 100).toFixed(0)}% ROI`;
-            
-            document.getElementById("calc-short-tp").innerText = '$' + formatCryptoPrice(short_tp);
-            document.getElementById("calc-short-sl").innerText = '$' + formatCryptoPrice(short_sl);
-            document.getElementById("calc-short-liq").innerText = '$' + formatCryptoPrice(short_liq);
-            document.getElementById("calc-short-tp-pnl").innerText = `AI 預估獲利: +${(dynamicProfitMultiplier * leverage * 100).toFixed(0)}% ROI`;
-            document.getElementById("calc-short-sl-pnl").innerText = `AI 預估防禦: -${(dynamicLossMultiplier * leverage * 100).toFixed(0)}% ROI`;
-
-            // AI 安全標記邏輯
-            document.getElementById("long-safety-badge").className = (long_sl <= long_liq) ? "text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-500 animate-bounce font-bold" : "text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-bold";
-            document.getElementById("short-safety-badge").className = (short_sl >= short_liq) ? "text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-500 animate-bounce font-bold" : "text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-bold";
-
-            if(vol) document.getElementById("feat-vol").innerText = '$' + vol.toLocaleString(undefined, { maximumFractionDigits: 0 });
-
-            // 🧠 AI 決策描述區
-            const verdictTag = document.getElementById("ai-verdict");
-            const confidenceTag = document.getElementById("ai-confidence");
-            const descP = document.getElementById("feat-real-desc");
-            
-            if (aiData.isOverbought) {
-                verdictTag.innerText = "🚨 市場過熱 (AI 訊號: 超買)";
-                confidenceTag.innerText = `🔥 AI 決策：高位壓抑 // 託管鎖定 ${leverage}x 槓桿`;
-                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>檢測到 RSI 指標過熱。AI 已執行 <b>「逆勢防禦」</b>，限制槓桿以避開主力出貨插針。`;
-            } else if (aiData.isOversold) {
-                verdictTag.innerText = "⚡ 市場極度超賣 (AI 訊號: 接針)";
-                confidenceTag.innerText = `🔥 AI 決策：底部強撐 // 託管鎖定 ${leverage}x 槓桿`;
-                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>市場出現恐慌性拋售，AI 偵測到 <b>「超賣反彈機會」</b>，已自動調整掛單位置。`;
-            } else {
-                verdictTag.innerText = "⚖️ 區間震盪 (AI 訊號: 趨勢觀望)";
-                confidenceTag.innerText = `📊 AI 決策：震盪縮量 // 託管調整至 ${leverage}x`;
-                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>指標顯示市場處於常態波動區間。AI 維持 <b>「高頻震盪策略」</b>，捕捉小區間利潤。`;
-            }
-        }
-
-        async function fetchFundingRate(symbol) {
-            try {
-                const res = await fetch(`https://www.okx.com/api/v5/public/funding-rate?instId=${symbol}`).then(r => r.json());
-                if (res.code === "0" && res.data.length > 0) {
-                    currentFundingRate = parseFloat(res.data[0].fundingRate);
-                    document.getElementById("feat-funding").innerText = (currentFundingRate * 100).toFixed(4) + '%';
-                }
-            } catch (e) { console.error(e); }
-        }
-
-        async function handleSearch() {
-            const input = document.getElementById("search-input").value.trim().toUpperCase();
-            if (!input) return;
-            let formattedSymbol = input.includes("-USDT-SWAP") ? input : `${input}-USDT-SWAP`;
-            currentSelectedSymbol = formattedSymbol;
-            document.getElementById("active-ticker").innerText = currentSelectedSymbol;
-            isAiManagedLeverage = true;
-            await fetchFundingRate(currentSelectedSymbol);
-            await fetchSingleTickerData();
-            document.getElementById("search-input").value = "";
-        }
-
-        async function scanMarketAnomalies() {
-            try {
-                const res = await fetch("https://www.okx.com/api/v5/market/tickers?instType=SWAP");
-                const json = await res.json();
-                if (json.code !== "0") return;
-
-                allTickers = json.data
-                    .filter(item => item.instId.endsWith("-USDT-SWAP"))
-                    .map(item => {
-                        return { 
-                            symbol: item.instId, 
-                            last: parseFloat(item.last), 
-                            change: parseFloat(item.open24h) ? (parseFloat(item.last) - parseFloat(item.open24h)) / parseFloat(item.open24h) : 0, 
-                            vol: parseFloat(item.volCcy24h) 
-                        };
-                    });
-
-                anorousTickers = allTickers.filter(item => Math.abs(item.change) >= 0.05 || item.vol >= 150000000);
-                anorousTickers.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
-                renderAnomalyList();
-            } catch (err) { console.error(err); }
-        }
-
-        function renderAnomalyList() {
-            const container = document.getElementById("anomaly-list");
-            const countTag = document.getElementById("anomaly-count");
-            container.innerHTML = "";
-            countTag.innerText = `${anorousTickers.length} 訊號`;
-
-            anorousTickers.slice(0, 14).forEach(item => {
-                const name = item.symbol.replace("-USDT-SWAP", "");
-                const div = document.createElement("div");
-                div.className = `p-2.5 rounded border text-xs font-mono flex justify-between items-center cursor-pointer transition duration-150 ${item.symbol === currentSelectedSymbol ? 'bg-[#142035] border-amber-500/50' : 'bg-[#0F1726] border-gray-800/80'}`;
-                div.onclick = async () => {
-                    currentSelectedSymbol = item.symbol;
-                    document.getElementById("active-ticker").innerText = currentSelectedSymbol;
-                    isAiManagedLeverage = true;
-                    await fetchFundingRate(currentSelectedSymbol);
-                    await fetchSingleTickerData();
-                    renderAnomalyList();
-                };
-                div.innerHTML = `<div><span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block mr-2 animate-pulse"></span>${name}</div>
-                                 <div class="${item.change >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">${(item.change * 100).toFixed(2)}%</div>`;
-                container.appendChild(div);
-            });
-        }
-
-        document.getElementById("search-input").addEventListener("keypress", function(e) { if (e.key === "Enter") handleSearch(); });
-
-        window.onload = async function() {
-            await scanMarketAnomalies();
-            await fetchFundingRate(currentSelectedSymbol);
-            await fetchSingleTickerData();
-            if(updateIntervalToken) clearInterval(updateIntervalToken);
-            updateIntervalToken = setInterval(async () => { await fetchSingleTickerData(); }, 1500);
-            setInterval(scanMarketAnomalies, 5000);
+    anomalyTickers.slice(0, 16).forEach(item => {
+        const name   = item.symbol.replace("-USDT-SWAP", "");
+        const isActive = item.symbol === currentSymbol;
+        const div = document.createElement("div");
+        div.className = `p-2 rounded border text-xs font-mono flex justify-between items-center cursor-pointer transition duration-150 hover:border-amber-500/40 ${
+            isActive ? "bg-[#142035] border-amber-500/50" : "bg-[#0F1726] border-gray-800/80"
+        }`;
+        div.onclick = async () => {
+            currentSymbol = item.symbol;
+            document.getElementById("active-ticker").innerText = currentSymbol;
+            isAiLeverage = true;
+            document.getElementById("ai-mode-status").innerText = "AI 託管中";
+            document.getElementById("ai-mode-status").className = "text-emerald-500 font-bold";
+            document.getElementById("leverage-title").innerText = "🤖 AI 推薦動態槓桿:";
+            atrCache = { symbol: "", atr: null };   // 清快取，強制重算
+            await Promise.all([fetchFunding(currentSymbol), fetchTicker()]);
+            fetchAndCalcATR(currentSymbol);
+            renderAnomalyList();
         };
-    </script>
+        div.innerHTML = `
+            <div class="flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full ${isActive ? 'bg-amber-400' : 'bg-red-500 animate-pulse'} inline-block"></span>
+                <span class="${isActive ? 'text-amber-300' : 'text-gray-300'}">${name}</span>
+            </div>
+            <div class="${item.change >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">${(item.change * 100).toFixed(2)}%</div>`;
+        container.appendChild(div);
+    });
+}
+
+function triggerRecalc() {
+    if (!allTickers.length) return;
+    const cur = allTickers.find(t => t.symbol === currentSymbol);
+    if (cur) renderMatrix(cur.last, cur.change, cur.vol);
+}
+
+// ─────────────────────────────────────────────
+//  搜尋
+// ─────────────────────────────────────────────
+async function handleSearch() {
+    const raw = document.getElementById("search-input").value.trim().toUpperCase();
+    if (!raw) return;
+    currentSymbol = raw.includes("-USDT-SWAP") ? raw : `${raw}-USDT-SWAP`;
+    document.getElementById("active-ticker").innerText = currentSymbol;
+    isAiLeverage = true;
+    document.getElementById("ai-mode-status").innerText = "AI 託管中";
+    document.getElementById("ai-mode-status").className = "text-emerald-500 font-bold";
+    document.getElementById("leverage-title").innerText = "🤖 AI 推薦動態槓桿:";
+    atrCache = { symbol: "", atr: null };
+    document.getElementById("search-input").value = "";
+    await Promise.all([fetchFunding(currentSymbol), fetchTicker()]);
+    fetchAndCalcATR(currentSymbol);   // 非同步，不阻塞主流程
+}
+
+document.getElementById("search-input").addEventListener("keypress", e => {
+    if (e.key === "Enter") handleSearch();
+});
+
+// ─────────────────────────────────────────────
+//  初始化
+// ─────────────────────────────────────────────
+window.onload = async function () {
+    await scanAnomalies();
+    await Promise.all([fetchFunding(currentSymbol), fetchTicker()]);
+    fetchAndCalcATR(currentSymbol);   // ATR 計算（異步，不卡主線程）
+
+    // 即時價格：1.5s
+    if (updateTimer) clearInterval(updateTimer);
+    updateTimer = setInterval(fetchTicker, 1500);
+
+    // 異常池：5s
+    setInterval(scanAnomalies, 5000);
+
+    // ATR 重算：60s（K 線數據更新不頻繁）
+    if (atrTimer) clearInterval(atrTimer);
+    atrTimer = setInterval(() => fetchAndCalcATR(currentSymbol), 60_000);
+};
+</script>
 </body>
 </html>
