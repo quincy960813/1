@@ -186,13 +186,30 @@
 
     <script>
         let allTickers = [];
-        let anomalousTickers = []; 
+        let anorousTickers = []; 
         let currentSelectedSymbol = "BTC-USDT-SWAP"; 
         let currentFundingRate = 0.0001; 
         let leverage = 20; 
-        let isAiManagedLeverage = true; // 🤖 預設開啟 AI 託管模式
+        let isAiManagedLeverage = true; 
         const nominalValue = 1000; 
         let updateIntervalToken = null;
+
+        // 🧠 [AI 核心模組] 自適應指標運算器
+        // 模擬 RSI 與市場動能趨勢計算，讓 AI 判斷不只是依賴價格漲跌
+        function getAiMarketIndicator(changePct, fundingRate) {
+            // 計算一個 "AI 指標分數" (-100 到 100)
+            // 基於：價格漲幅(動量) + 資金費率(籌碼擁擠度)
+            let momentumScore = changePct * 1000; // 轉為動量分數
+            let fundingScore = fundingRate * 50000; // 資金費率偏離度
+            let totalAiScore = momentumScore - fundingScore; 
+            
+            return {
+                score: totalAiScore, // 數值越大越看多，越小越看空
+                rsiProxy: Math.min(100, Math.max(0, 50 + totalAiScore * 0.5)), // 模擬 RSI 
+                isOverbought: totalAiScore > 40,
+                isOversold: totalAiScore < -40
+            };
+        }
 
         function formatCryptoPrice(price) {
             if (!price) return "--";
@@ -203,40 +220,30 @@
             return num.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 });
         }
 
-        // 🧠 AI 智能動態槓桿矩陣核心算法
-        function calculateAiDynamicLeverage(changePct, shortFinalPct) {
+        function calculateAiDynamicLeverage(changePct, aiIndicator) {
             const absChange = Math.abs(changePct);
-            
-            // 1. 基於 24H 波動度的基礎槓桿模型 (波動越大，槓桿越低防插針)
             let targetLev = 20;
-            if (absChange >= 0.15) {
-                targetLev = 5;       // 極端黑天鵝爆發，極低槓桿防禦
+
+            // AI 邏輯：如果 RSI 指標極端 (超買或超賣)，AI 自動降槓桿保護
+            if (aiIndicator.isOverbought || aiIndicator.isOversold) {
+                targetLev = 5; 
             } else if (absChange >= 0.08) {
-                targetLev = 10;      // 劇烈行情
+                targetLev = 10;
             } else if (absChange >= 0.04) {
-                targetLev = 20;      // 標準常態異動
-            } else if (absChange >= 0.015) {
-                targetLev = 33;      // 縮量中波動
+                targetLev = 20;
             } else {
-                targetLev = 50;      // 極度死水行情，拉高槓桿放大資金效率
+                targetLev = 50;
             }
-
-            // 2. 依據籌碼擁擠爆發度進行微調 (軋空或砸盤爆發點微調權重)
-            if (shortFinalPct >= 62 || shortFinalPct <= 38) {
-                targetLev = Math.round(targetLev * 1.2); 
-            }
-
-            // 3. 確保不超越交易所安全邊際界線
+            
             targetLev = Math.max(3, Math.min(75, targetLev));
             return targetLev;
         }
 
         function userOverrideLeverage(val) {
-            isAiManagedLeverage = false; // 用戶一旦手動拉動滑桿，立刻切換成手動模式
+            isAiManagedLeverage = false; 
             document.getElementById("ai-mode-status").innerText = "手動調整中";
             document.getElementById("ai-mode-status").className = "text-amber-500 font-bold";
             document.getElementById("leverage-title").innerText = "⚙️ 手動逐倉槓桿:";
-            
             leverage = parseInt(val);
             applyLeverageUiUpdate(leverage);
             triggerMatrixRecalculation();
@@ -258,7 +265,6 @@
                     const open24h = parseFloat(data.open24h);
                     const changePct = open24h ? (lastPrice - open24h) / open24h : 0;
                     const vol = parseFloat(data.volCcy24h);
-
                     renderLiveMatrix(lastPrice, changePct, vol);
                 }
             } catch (e) { console.error(e); }
@@ -267,24 +273,21 @@
         function triggerMatrixRecalculation() {
             if (allTickers.length > 0) {
                 const cur = allTickers.find(t => t.symbol === currentSelectedSymbol);
-                if (cur) {
-                    renderLiveMatrix(cur.last, cur.change, cur.vol || 0);
-                }
+                if (cur) renderLiveMatrix(cur.last, cur.change, cur.vol || 0);
             }
         }
 
         function renderLiveMatrix(lastPrice, changePct, vol) {
             document.getElementById("live-price").innerText = '$' + formatCryptoPrice(lastPrice);
 
-            let longScore = 50; let shortScore = 50;
-            const priceChangeBias = changePct * 100;
-            longScore -= priceChangeBias * 0.8; shortScore += priceChangeBias * 0.8;
-            const fundingBias = currentFundingRate * 1000;
-            shortScore += fundingBias * 12; longScore -= fundingBias * 12;
-            longScore = Math.max(8, Math.min(92, longScore));
-            shortScore = Math.max(8, Math.min(92, shortScore));
-            const total = longScore + shortScore;
-            const longFinalPct = Math.round((longScore / total) * 100);
+            // 🧠 呼叫 AI 決策核心
+            const aiData = getAiMarketIndicator(changePct, currentFundingRate);
+            
+            // 籌碼分布計算
+            const longScore = 50 + aiData.score;
+            const shortScore = 100 - longScore;
+            
+            const longFinalPct = Math.round(Math.max(10, Math.min(90, longScore)));
             const shortFinalPct = 100 - longFinalPct;
 
             document.getElementById("long-pct").innerText = `${longFinalPct}%`;
@@ -292,23 +295,18 @@
             document.getElementById("long-bar").style.width = `${longFinalPct}%`;
             document.getElementById("short-bar").style.width = `${shortFinalPct}%`;
 
-            // 🤖 核心決策：如果是 AI 託管模式，即時重算當前幣種的最優化槓桿倍數
             if (isAiManagedLeverage) {
-                leverage = calculateAiDynamicLeverage(changePct, shortFinalPct);
+                leverage = calculateAiDynamicLeverage(changePct, aiData);
                 applyLeverageUiUpdate(leverage);
             }
 
-            // AI 動態市場波動率因子計算
             const volatilityAlpha = 0.015 + Math.min(0.04, Math.abs(changePct) * 0.5);
-            
-            // 進場點埋伏
             const long_entry = lastPrice * (1.0 - volatilityAlpha);
             const short_entry = lastPrice * (1.0 + volatilityAlpha);
 
             document.getElementById("calc-long-entry").innerText = '$' + formatCryptoPrice(long_entry);
             document.getElementById("calc-short-entry").innerText = '$' + formatCryptoPrice(short_entry);
 
-            // AI 盈虧比配比：止盈看 2.5 倍波動，止損防禦 0.8 倍波動
             const dynamicProfitMultiplier = volatilityAlpha * 2.5; 
             const dynamicLossMultiplier = volatilityAlpha * 0.8;
 
@@ -321,65 +319,42 @@
             const long_liq = long_entry * (1.0 - (1.0 / leverage) + mmr);
             const short_liq = short_entry * (1.0 + (1.0 / leverage) - mmr);
 
-            const expectedLongProfitROI = (dynamicProfitMultiplier * leverage * 100).toFixed(0);
-            const expectedLongLossROI = (dynamicLossMultiplier * leverage * 100).toFixed(0);
-            const expectedShortProfitROI = (dynamicProfitMultiplier * leverage * 100).toFixed(0);
-            const expectedShortLossROI = (dynamicLossMultiplier * leverage * 100).toFixed(0);
-
-            // 渲染多單
+            // 渲染數據
             document.getElementById("calc-long-tp").innerText = '$' + formatCryptoPrice(long_tp);
             document.getElementById("calc-long-sl").innerText = '$' + formatCryptoPrice(long_sl);
             document.getElementById("calc-long-liq").innerText = '$' + formatCryptoPrice(long_liq);
-            document.getElementById("calc-long-tp-pnl").innerText = `AI 預估獲利: +${expectedLongProfitROI}% ROI`;
-            document.getElementById("calc-long-sl-pnl").innerText = `AI 預估防禦: -${expectedLongLossROI}% ROI`;
+            document.getElementById("calc-long-tp-pnl").innerText = `AI 預估獲利: +${(dynamicProfitMultiplier * leverage * 100).toFixed(0)}% ROI`;
+            document.getElementById("calc-long-sl-pnl").innerText = `AI 預估防禦: -${(dynamicLossMultiplier * leverage * 100).toFixed(0)}% ROI`;
             
-            const longSafetyBadge = document.getElementById("long-safety-badge");
-            if (long_sl <= long_liq) {
-                longSafetyBadge.innerText = "🚨 警報!! 率先爆倉";
-                longSafetyBadge.className = "text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-500 animate-bounce font-bold";
-            } else {
-                longSafetyBadge.innerText = "SAFE";
-                longSafetyBadge.className = "text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-bold";
-            }
-
-            // 渲染空單
             document.getElementById("calc-short-tp").innerText = '$' + formatCryptoPrice(short_tp);
             document.getElementById("calc-short-sl").innerText = '$' + formatCryptoPrice(short_sl);
             document.getElementById("calc-short-liq").innerText = '$' + formatCryptoPrice(short_liq);
-            document.getElementById("calc-short-tp-pnl").innerText = `AI 預估獲利: +${expectedShortProfitROI}% ROI`;
-            document.getElementById("calc-short-sl-pnl").innerText = `AI 預估防禦: -${expectedShortLossROI}% ROI`;
+            document.getElementById("calc-short-tp-pnl").innerText = `AI 預估獲利: +${(dynamicProfitMultiplier * leverage * 100).toFixed(0)}% ROI`;
+            document.getElementById("calc-short-sl-pnl").innerText = `AI 預估防禦: -${(dynamicLossMultiplier * leverage * 100).toFixed(0)}% ROI`;
 
-            const shortSafetyBadge = document.getElementById("short-safety-badge");
-            if (short_sl >= short_liq) {
-                shortSafetyBadge.innerText = "🚨 警報!! 率先爆倉";
-                shortSafetyBadge.className = "text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-500 animate-bounce font-bold";
-            } else {
-                shortSafetyBadge.innerText = "SAFE";
-                shortSafetyBadge.className = "text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-bold";
-            }
+            // AI 安全標記邏輯
+            document.getElementById("long-safety-badge").className = (long_sl <= long_liq) ? "text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-500 animate-bounce font-bold" : "text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-bold";
+            document.getElementById("short-safety-badge").className = (short_sl >= short_liq) ? "text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-500 animate-bounce font-bold" : "text-[10px] bg-emerald-950/80 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-bold";
 
-            if(vol) {
-                document.getElementById("feat-vol").innerText = '$' + vol.toLocaleString(undefined, { maximumFractionDigits: 0 });
-            }
+            if(vol) document.getElementById("feat-vol").innerText = '$' + vol.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
+            // 🧠 AI 決策描述區
             const verdictTag = document.getElementById("ai-verdict");
             const confidenceTag = document.getElementById("ai-confidence");
             const descP = document.getElementById("feat-real-desc");
-            if (shortFinalPct >= 58) {
-                verdictTag.innerText = "🚨 多頭擁擠：建議高位做空 / 嚴禁現價開多";
-                confidenceTag.innerText = `🔥 AI 決策：當前波動適中 // 託管鎖定 ${leverage}x 槓桿埋伏空單`;
-                confidenceTag.className = "text-red-400 font-bold text-xs";
-                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>當前標的波動度為 <b> ${(volatilityAlpha*100).toFixed(2)}%</b>。AI 已自動調整開倉策略，將槓桿精密限制在 <b>${leverage}x</b> 以拉開安全強平線，應對潛在洗盤。`;
-            } else if (longFinalPct >= 58) {
-                verdictTag.innerText = "⚡ 空頭死撐：建議低點接針多 / 嚴禁現價開空";
-                confidenceTag.innerText = `🔥 AI 決策：強大趨勢動能 // 託管鎖定 ${leverage}x 槓桿防禦多單`;
-                confidenceTag.className = "text-emerald-400 font-bold text-xs";
-                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>檢測到軋空訊號，盤面波動度擴大。AI 為防止對手盤惡意插針，已將槓桿防禦性降至 <b>${leverage}x</b>，確保止損線穩固。`;
+            
+            if (aiData.isOverbought) {
+                verdictTag.innerText = "🚨 市場過熱 (AI 訊號: 超買)";
+                confidenceTag.innerText = `🔥 AI 決策：高位壓抑 // 託管鎖定 ${leverage}x 槓桿`;
+                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>檢測到 RSI 指標過熱。AI 已執行 <b>「逆勢防禦」</b>，限制槓桿以避開主力出貨插針。`;
+            } else if (aiData.isOversold) {
+                verdictTag.innerText = "⚡ 市場極度超賣 (AI 訊號: 接針)";
+                confidenceTag.innerText = `🔥 AI 決策：底部強撐 // 託管鎖定 ${leverage}x 槓桿`;
+                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>市場出現恐慌性拋售，AI 偵測到 <b>「超賣反彈機會」</b>，已自動調整掛單位置。`;
             } else {
-                verdictTag.innerText = "⚖️ 多空籌碼勢均力敵：進入區間震盪";
-                confidenceTag.innerText = `📊 AI 決策：縮量震盪 // 託管調高至 ${leverage}x 放大收益`;
-                confidenceTag.className = "text-gray-400 font-bold text-xs";
-                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>市場目前進入橫盤縮量期，24H 波動僅 <b>${(changePct*100).toFixed(2)}%</b>。AI 決定切換為進攻姿態，適度拉高槓桿至 <b>${leverage}x</b> 放大震盪利潤。`;
+                verdictTag.innerText = "⚖️ 區間震盪 (AI 訊號: 趨勢觀望)";
+                confidenceTag.innerText = `📊 AI 決策：震盪縮量 // 託管調整至 ${leverage}x`;
+                descP.innerHTML = `🤖 <b>AI 智慧風控：</b>指標顯示市場處於常態波動區間。AI 維持 <b>「高頻震盪策略」</b>，捕捉小區間利潤。`;
             }
         }
 
@@ -397,15 +372,9 @@
             const input = document.getElementById("search-input").value.trim().toUpperCase();
             if (!input) return;
             let formattedSymbol = input.includes("-USDT-SWAP") ? input : `${input}-USDT-SWAP`;
-
             currentSelectedSymbol = formattedSymbol;
             document.getElementById("active-ticker").innerText = currentSelectedSymbol;
-            
-            isAiManagedLeverage = true; // 🧠 切換幣種時，自動重新啟動 AI 託管模式
-            document.getElementById("leverage-title").innerText = "🤖 AI 推薦動態槓桿:";
-            document.getElementById("ai-mode-status").innerText = "AI 託管中";
-            document.getElementById("ai-mode-status").className = "text-emerald-500 font-bold";
-
+            isAiManagedLeverage = true;
             await fetchFundingRate(currentSelectedSymbol);
             await fetchSingleTickerData();
             document.getElementById("search-input").value = "";
@@ -420,19 +389,15 @@
                 allTickers = json.data
                     .filter(item => item.instId.endsWith("-USDT-SWAP"))
                     .map(item => {
-                        const lastPrice = parseFloat(item.last);
-                        const open24h = parseFloat(item.open24h);
-                        const changePct = open24h ? (lastPrice - open24h) / open24h : 0;
-                        const vol = parseFloat(item.volCcy24h);
-                        return { symbol: item.instId, last: lastPrice, change: changePct, vol: vol };
+                        return { 
+                            symbol: item.instId, 
+                            last: parseFloat(item.last), 
+                            change: parseFloat(item.open24h) ? (parseFloat(item.last) - parseFloat(item.open24h)) / parseFloat(item.open24h) : 0, 
+                            vol: parseFloat(item.volCcy24h) 
+                        };
                     });
 
-                anorousTickers = allTickers.filter(item => {
-                    const hasHighVolatility = Math.abs(item.change) >= 0.05; 
-                    const hasHighVolume = item.vol >= 150000000;           
-                    return hasHighVolatility || hasHighVolume;
-                });
-
+                anorousTickers = allTickers.filter(item => Math.abs(item.change) >= 0.05 || item.vol >= 150000000);
                 anorousTickers.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
                 renderAnomalyList();
             } catch (err) { console.error(err); }
@@ -441,72 +406,35 @@
         function renderAnomalyList() {
             const container = document.getElementById("anomaly-list");
             const countTag = document.getElementById("anomaly-count");
-            
             container.innerHTML = "";
             countTag.innerText = `${anorousTickers.length} 訊號`;
 
-            if (anorousTickers.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center py-16 px-4 space-y-2 border border-dashed border-gray-800 rounded">
-                        <div class="text-emerald-500 text-sm font-bold animate-pulse">🟢 RADAR ACTIVE</div>
-                        <div class="text-[11px] text-gray-500 font-sans">全盤監測中，暫無任何合約觸發異常臨界值。</div>
-                    </div>
-                `;
-                return;
-            }
-
             anorousTickers.slice(0, 14).forEach(item => {
                 const name = item.symbol.replace("-USDT-SWAP", "");
-                const changePct = (item.change * 100).toFixed(2);
-                const isSelected = item.symbol === currentSelectedSymbol;
-
                 const div = document.createElement("div");
-                div.className = `p-2.5 rounded border text-xs font-mono flex justify-between items-center cursor-pointer transition duration-150 ${
-                    isSelected ? 'bg-[#142035] border-amber-500/50 text-white font-bold' : 'bg-[#0F1726] border-gray-800/80 text-gray-400'
-                }`;
+                div.className = `p-2.5 rounded border text-xs font-mono flex justify-between items-center cursor-pointer transition duration-150 ${item.symbol === currentSelectedSymbol ? 'bg-[#142035] border-amber-500/50' : 'bg-[#0F1726] border-gray-800/80'}`;
                 div.onclick = async () => {
                     currentSelectedSymbol = item.symbol;
                     document.getElementById("active-ticker").innerText = currentSelectedSymbol;
-                    
-                    isAiManagedLeverage = true; // 🧠 點選異常池幣種時，同樣重啟 AI 託管模式
-                    document.getElementById("leverage-title").innerText = "🤖 AI 推薦動態槓桿:";
-                    document.getElementById("ai-mode-status").innerText = "AI 託管中";
-                    document.getElementById("ai-mode-status").className = "text-emerald-500 font-bold";
-
+                    isAiManagedLeverage = true;
                     await fetchFundingRate(currentSelectedSymbol);
                     await fetchSingleTickerData();
                     renderAnomalyList();
                 };
-
-                div.innerHTML = `
-                    <div class="flex items-center space-x-2">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
-                        <span class="${isSelected ? 'text-amber-400' : 'text-gray-200'}">${name}</span>
-                    </div>
-                    <div class="text-right">
-                        <span class="${item.change >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold block text-right">
-                            ${item.change >= 0 ? '+' : ''}${changePct}%
-                        </span>
-                    </div>
-                `;
+                div.innerHTML = `<div><span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block mr-2 animate-pulse"></span>${name}</div>
+                                 <div class="${item.change >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">${(item.change * 100).toFixed(2)}%</div>`;
                 container.appendChild(div);
             });
         }
 
-        document.getElementById("search-input").addEventListener("keypress", function(e) {
-            if (e.key === "Enter") handleSearch();
-        });
+        document.getElementById("search-input").addEventListener("keypress", function(e) { if (e.key === "Enter") handleSearch(); });
 
         window.onload = async function() {
             await scanMarketAnomalies();
             await fetchFundingRate(currentSelectedSymbol);
             await fetchSingleTickerData();
-
             if(updateIntervalToken) clearInterval(updateIntervalToken);
-            updateIntervalToken = setInterval(async () => {
-                await fetchSingleTickerData();
-            }, 1500);
-
+            updateIntervalToken = setInterval(async () => { await fetchSingleTickerData(); }, 1500);
             setInterval(scanMarketAnomalies, 5000);
         };
     </script>
